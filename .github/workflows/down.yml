@@ -1,0 +1,68 @@
+name: Download and Upload
+
+on:
+  # 触发条件：push link.txt 或 workflow 文件本身
+  push:
+    paths:
+      - 'link.txt'
+      - '.github/workflows/download_and_upload.yml'
+
+jobs:
+  download_and_upload:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 检出代码
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 读取 link.txt 文件
+      - name: Read links from link.txt
+        id: read_links
+        run: |
+          # 读取 link.txt 的内容并将其保存到环境变量
+          links=$(cat link.txt)
+          echo "LINKS=$links" >> $GITHUB_ENV
+
+      # 下载链接内容
+      - name: Download links
+        id: download
+        env:
+          LINKS: ${{ env.LINKS }}
+        run: |
+          # 使用 Python 脚本下载链接内容
+          python - <<EOF
+          import os
+          import requests
+          from tqdm import tqdm
+
+          # 获取链接列表
+          links = os.getenv("LINKS").split("\n") if os.getenv("LINKS") else []
+          filenames = []
+
+          # 遍历链接下载
+          for url in links:
+              if not url.strip():
+                  continue
+              filename = url.split("/")[-1]
+              filenames.append(filename)
+              response = requests.get(url, stream=True)
+              total_size = int(response.headers.get("content-length", 0))
+              with open(filename, "wb") as f:
+                  with tqdm(total=total_size, unit="B", unit_scale=True, desc=filename) as pbar:
+                      for chunk in response.iter_content(chunk_size=1024):
+                          if chunk:
+                              f.write(chunk)
+                              pbar.update(len(chunk))
+
+          # 保存文件名到环境变量
+          print(f"::set-output name=filenames::{' '.join(filenames)}")
+          EOF
+
+      # 上传产物到 GitHub Artifacts
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: downloaded-files
+          path: |
+            ${{ join(fromJSON('["' + steps.download.outputs.filenames + '"]'), ' ') }}
