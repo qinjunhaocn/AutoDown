@@ -2,8 +2,11 @@
 name: Download and Upload Files
 
 on:
-  workflow_dispatch: # 手动触发工作流
-  # 如果需要其他触发方式（如推送或 PR），可以在此添加
+  push:
+  # 监控 link.txt 文件的变化
+  # 也可以监控整个目录的变化
+  # paths:
+  #   - 'AutoDown/**'
 
 jobs:
   download-and-process:
