@@ -1,68 +1,39 @@
-name: Download and Upload
+# 文件路径：.github/workflows/download-and-upload.yml
+name: Download and Upload Files
 
 on:
-  # 触发条件：push link.txt 或 workflow 文件本身
-  push:
-    paths:
-      - 'link.txt'
-      - '.github/workflows/download_and_upload.yml'
+  workflow_dispatch: # 手动触发工作流
+  # 如果需要其他触发方式（如推送或 PR），可以在此添加
 
 jobs:
-  download_and_upload:
-    runs-on: ubuntu-latest
+  download-and-process:
+    runs-on: ubuntu-latest # 使用最新的 Ubuntu 虚拟机
 
     steps:
-      # 检出代码
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
-      # 读取 link.txt 文件
-      - name: Read links from link.txt
-        id: read_links
-        run: |
-          # 读取 link.txt 的内容并将其保存到环境变量
-          links=$(cat link.txt)
-          echo "LINKS=$links" >> $GITHUB_ENV
+    - name: Download link.txt
+      run: |
+        # 下载原始文件
+        curl -L -o link.txt https://raw.githubusercontent.com/qinjunhaocn/AutoDown/main/link.txt
+        # 查看文件内容
+        cat link.txt
 
-      # 下载链接内容
-      - name: Download links
-        id: download
-        env:
-          LINKS: ${{ env.LINKS }}
-        run: |
-          # 使用 Python 脚本下载链接内容
-          python - <<EOF
-          import os
-          import requests
-          from tqdm import tqdm
+    - name: Read and Download Links
+      run: |
+        # 读取 link.txt 文件中的链接并下载
+        # 假设 link.txt 中的链接是每行一个
+        while IFS= read -r line; do
+          # 检查是否是有效的链接
+          if [[ "$line" =~ ^https?:// ]]; then
+            # 使用 wget 下载链接内容到 artifacts 文件夹
+            wget -P artifacts/ "$line"
+          fi
+        done < link.txt
 
-          # 获取链接列表
-          links = os.getenv("LINKS").split("\n") if os.getenv("LINKS") else []
-          filenames = []
-
-          # 遍历链接下载
-          for url in links:
-              if not url.strip():
-                  continue
-              filename = url.split("/")[-1]
-              filenames.append(filename)
-              response = requests.get(url, stream=True)
-              total_size = int(response.headers.get("content-length", 0))
-              with open(filename, "wb") as f:
-                  with tqdm(total=total_size, unit="B", unit_scale=True, desc=filename) as pbar:
-                      for chunk in response.iter_content(chunk_size=1024):
-                          if chunk:
-                              f.write(chunk)
-                              pbar.update(len(chunk))
-
-          # 保存文件名到环境变量
-          print(f"::set-output name=filenames::{' '.join(filenames)}")
-          EOF
-
-      # 上传产物到 GitHub Artifacts
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: downloaded-files
-          path: |
-            ${{ join(fromJSON('["' + steps.download.outputs.filenames + '"]'), ' ') }}
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: downloaded-files # 上传产物的名称
+        path: artifacts/ # 产物的路径
